@@ -10,8 +10,8 @@ C9/C10. Extraction source: `gateway-ios` branch `anonymous-first-onboarding`
 | Chunk | Scope | Status |
 |---|---|---|
 | S1 | SPM scaffold, frozen public API (EEGateway/EEConfig/EEStatus/EEState/EEListener), Linux harness | DONE 11/6 |
-| S2 | Pure core: HubblePacketParser, Counters, DeviceRollup, PacketQueue (de-SwiftData'd), Backoff/EidThrottle (new ports — app had none; Android SDK is the spec), payload builders | parser+counters+rollup DONE 11/6; rest open |
-| S3 | Headless EEClient (mint, claim-status, ingest, heartbeat; URLSession) | open |
+| S2 | Pure core: HubblePacketParser, Counters, DeviceRollup, UploadPacket, PacketQueue + QueueStore (de-SwiftData'd), EidThrottle, Backoff | DONE 11/6 (66 tests) |
+| S3 | Headless EEClient (mint, claim-status, ingest, heartbeat; URLSession) + packet/heartbeat payload builders (they live inside the app's EEClient, so they port here, not S2) | open |
 | S4 | TokenStore (Keychain; protocol seam so logic tests on Linux) | open |
 | S5 | Pipeline: CBCentralManager scanner + CoreLocation via seams, loops, Engine, dormancy gate | open |
 | S6 | Guardrails: ProvisionRunner, PAUSED_REMOTE kill switch, publicId from heartbeat | open |
@@ -68,8 +68,21 @@ C9/C10. Extraction source: `gateway-ios` branch `anonymous-first-onboarding`
   as-shipped: iOS caps the heartbeat block at top-50 **by packet count**;
   the Android SDK caps by recency and clamps last-seen monotonic. Shipped-app
   parity wins over cross-SDK unification until a partner complains.
-- PacketQueue in the app leans on SwiftData (`import SwiftData`) — the SDK
-  port must drop that (zero-dependency + iOS 15 floor + Linux testability).
-  Plan: mirror the Android SDK's PacketQueue + QueueStore (JSON file
-  persistence) semantics instead. That makes PacketQueue an ADAPTED port,
-  not verbatim — flagged here because everything else so far is verbatim.
+- **PacketQueue + QueueStore are ADAPTED ports of the Android SDK**, not
+  app extractions: the app's queue is SwiftData + MainActor-pinned, which
+  fails every SDK constraint (zero deps, iOS 15 floor, Linux testability,
+  no main-actor coupling). The Android pair was itself distilled from the
+  same plan contracts, so it's the spec. Deltas from Android, both
+  mechanical: `@Volatile onChange` → lock-guarded accessor (same guarantee,
+  one mechanism); temp-file-then-rename → Foundation's
+  `write(atomically:)`, which is the same scheme under the hood. File
+  format `eeq1` is byte-identical cross-platform. Capacity note: the SDK
+  keeps Android's 1,000-packet bound, NOT the app's 5,000 — SDK memory
+  discipline beats app parity here, same call the Android arc made.
+- **UploadPacket, EidThrottle, Backoff ported from the Android SDK** (the
+  app has no standalones — throttling/retry live inside its loops, and the
+  queue model doubles as the packet type). Backoff's Java `Random` seam
+  became a `() -> Double` closure; tests use a SplitMix64 stand-in for
+  seeded determinism. All Android test cases carried 1:1, plus a new
+  onChange-fires-on-mutations-only case and a schedulePersist coalescing
+  case.
