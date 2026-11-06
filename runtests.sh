@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 SWIFT="${SWIFT:-/home/clawuser/toolchain/swift/usr/bin/swift}"
 [ -x "$SWIFT" ] || SWIFT="swift"
 
-EXPECTED_TESTS=142
+EXPECTED_TESTS=151
 
 out=$("$SWIFT" test 2>&1) || { echo "$out" | tail -40; exit 1; }
 summary=$(echo "$out" | grep -E "^Test Suite 'All tests' (passed|failed)" -A1 | tail -1)

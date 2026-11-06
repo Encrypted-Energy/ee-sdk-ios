@@ -50,7 +50,7 @@ Reviewed and ACCEPTED as-is (all Android-parity):
 | S1 | SPM scaffold, frozen public API (EEGateway/EEConfig/EEStatus/EEState/EEListener), Linux harness | DONE 11/6 |
 | S2 | Pure core: HubblePacketParser, Counters, DeviceRollup, UploadPacket, PacketQueue + QueueStore (de-SwiftData'd), EidThrottle, Backoff | DONE 11/6 (66 tests) |
 | S3 | Headless EEClient + BatchSender + payload builders (Json/PacketJson/HeartbeatPayload/LocationFix) | DONE 11/6 (141 tests) |
-| S4 | TokenStore (Keychain; protocol seam so logic tests on Linux) | open |
+| S4 | TokenStore protocol + KeychainTokenStore + TokenProvision (verify-before-persist) | DONE 11/6 (151 tests on Linux; +3 Keychain tests Darwin-only) |
 | S5 | Pipeline: CBCentralManager scanner + CoreLocation via seams, loops, Engine, dormancy gate | open |
 | S6 | Guardrails: ProvisionRunner, PAUSED_REMOTE kill switch, publicId from heartbeat | open |
 | S7 | Minimal sample app (Xcode project — John's Mac) | open |
@@ -162,3 +162,31 @@ Reviewed and ACCEPTED as-is (all Android-parity):
 - **ios-platform mint**: mintDevice sends `"platform":"ios"`; attestation
   stays omitted (server runs DEVICE_ATTESTATION=log) — revisit when the
   DeviceCheck build lands in the app, same caveat as Android.
+
+## S4 decisions
+
+- **No TokenCrypto on iOS, deliberately.** Android layers Keystore AES-GCM
+  over SharedPreferences because prefs are plaintext on disk. The Keychain
+  IS the platform secure store (encrypted at rest, hardware-backed); a
+  second envelope would add key-management failure modes for zero added
+  secrecy. So S4 = TokenStore protocol + KeychainTokenStore + the
+  TokenProvision invariants, and the Android TokenCrypto/TokenCryptoTest
+  pair has no iOS counterpart.
+- **TokenStore is a protocol** (Android surface: load/save/clear/
+  loadGatewayName/saveGatewayName) with the Keychain conformance behind
+  `#if canImport(Security)`. The Linux harness proves the provisioning
+  invariants through the seam; John's Mac `swift test` compiles AND
+  round-trips the real SecItem plumbing (KeychainTokenStoreTests,
+  Darwin-only) — live-storage coverage the Android Keystore never had off-
+  device. Linux pin is 151; a Mac run reports 154.
+- **Keychain details carried from the app's KeychainStore**: generic-
+  password class, upsert (update-then-add), and
+  kSecAttrAccessibleAfterFirstUnlock so background BLE relaunches can read
+  the token. SDK delta: service is `com.encryptedenergy.sdk` (the app owns
+  `com.encryptedenergy.gateway`), so SDK and first-party app never collide
+  on one device; gateway_name is a second account in the same service.
+- **TokenProvision ported 1:1** (all 9 invariant tests). The injected
+  verify/mint closures are async because this EEClient is async; Android's
+  blocking client took sync closures. save() stays best-effort void like
+  Android — a storage failure leaves the previous state and the next
+  start()'s reconcile sorts it out.
