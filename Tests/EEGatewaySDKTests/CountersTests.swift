@@ -3,15 +3,15 @@ import XCTest
 
 final class CountersTests: XCTestCase {
 
-    func testSnapshotReflectsIncrements() async {
+    func testSnapshotReflectsIncrements() {
         let counters = Counters()
-        await counters.heardPacket()
-        await counters.heardPacket()
-        await counters.forwarded(3)
-        await counters.droppedNoFix()
-        await counters.scanError()
+        counters.heardPacket()
+        counters.heardPacket()
+        counters.forwarded(3)
+        counters.droppedNoFix()
+        counters.scanError()
 
-        let snap = await counters.takeSnapshot()
+        let snap = counters.takeSnapshot()
         XCTAssertEqual(snap.heard, 2)
         XCTAssertEqual(snap.forwarded, 3)
         XCTAssertEqual(snap.droppedNoFix, 1)
@@ -19,26 +19,23 @@ final class CountersTests: XCTestCase {
         XCTAssertFalse(snap.isEmpty)
     }
 
-    func testSnapshotResets() async {
+    func testSnapshotResets() {
         let counters = Counters()
-        await counters.heardPacket()
-        _ = await counters.takeSnapshot()
-
-        let second = await counters.takeSnapshot()
-        XCTAssertTrue(second.isEmpty)
+        counters.heardPacket()
+        _ = counters.takeSnapshot()
+        XCTAssertTrue(counters.takeSnapshot().isEmpty)
     }
 
-    func testRestoreAddsOnTopOfNewCounts() async {
+    func testRestoreAddsOnTopOfNewCounts() {
         let counters = Counters()
-        await counters.heardPacket()
-        let snap = await counters.takeSnapshot()
+        counters.heardPacket()
+        let snap = counters.takeSnapshot()
 
         // Scanning continued while the POST was in flight.
-        await counters.heardPacket()
-        await counters.restore(snap)
+        counters.heardPacket()
+        counters.restore(snap)
 
-        let merged = await counters.takeSnapshot()
-        XCTAssertEqual(merged.heard, 2, "restore must add, not assign")
+        XCTAssertEqual(counters.takeSnapshot().heard, 2, "restore must add, not assign")
     }
 
     func testHeartbeatFieldKeysMatchWireFormat() {
@@ -55,13 +52,10 @@ final class CountersTests: XCTestCase {
         ])
     }
 
-    func testDroppedNoEIDIsLocalOnly() async {
+    func testDroppedNoEIDIsLocalOnly() {
         let counters = Counters()
-        await counters.droppedNoEIDFrame()
-
-        let snap = await counters.takeSnapshot()
-        XCTAssertTrue(snap.isEmpty, "no-eid drops have no server field (§1a)")
-        let local = await counters.droppedNoEID
-        XCTAssertEqual(local, 1)
+        counters.droppedNoEIDFrame()
+        XCTAssertTrue(counters.takeSnapshot().isEmpty, "no-eid drops have no server field (§1a)")
+        XCTAssertEqual(counters.droppedNoEID, 1)
     }
 }

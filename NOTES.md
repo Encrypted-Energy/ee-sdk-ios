@@ -51,8 +51,8 @@ Reviewed and ACCEPTED as-is (all Android-parity):
 | S2 | Pure core: HubblePacketParser, Counters, DeviceRollup, UploadPacket, PacketQueue + QueueStore (de-SwiftData'd), EidThrottle, Backoff | DONE 11/6 (66 tests) |
 | S3 | Headless EEClient + BatchSender + payload builders (Json/PacketJson/HeartbeatPayload/LocationFix) | DONE 11/6 (141 tests) |
 | S4 | TokenStore protocol + KeychainTokenStore + TokenProvision (verify-before-persist) | DONE 11/6 (151 tests on Linux; +3 Keychain tests Darwin-only) |
-| S5 | Pipeline: CBCentralManager scanner + CoreLocation via seams, loops, Engine, dormancy gate | open |
-| S6 | Guardrails: ProvisionRunner, PAUSED_REMOTE kill switch, publicId from heartbeat | open |
+| S5 | Pipeline: loops, PacketRadio/LocationSource seams + Darwin adapters, Engine, dormancy gate | DONE 11/6 (180 tests) |
+| S6 | Guardrails: ProvisionRunner wiring, PAUSED_REMOTE kill switch, publicId, facade↔engine wiring | open |
 | S7 | Minimal sample app (Xcode project — John's Mac) | open |
 
 ## Toolchain / harness
@@ -190,3 +190,47 @@ Reviewed and ACCEPTED as-is (all Android-parity):
   blocking client took sync closures. save() stays best-effort void like
   Android — a storage failure leaves the previous state and the next
   start()'s reconcile sorts it out.
+
+## S5 decisions
+
+- **Engine is seam-built and Linux-tested** — the big structural delta from
+  Android, whose Engine was stub-compiled only and dogfood-checked. The
+  dormancy gate (grants poll, mid-run revocation, the synchronous
+  revoked-between-check-and-call race), the packet path (fresh-fix stamp,
+  no-fix drop, eid-less drop), queue restore, and heartbeat runtime
+  composition are all proven with fake radio/location on Linux.
+- **Loops are Task-based** (ScheduledExecutorService → detached Task +
+  Task.sleep), tick()-testable, cadences pinned: upload 10 s (3 s initial),
+  heartbeat 300 s — the fleet-conservative cadence, NOT the app's 60 s.
+  Android's throwing-callback/throwing-wire guards have no counterpart: the
+  closure types are non-throwing, compiler-enforced.
+- **Counters became ADAPTED (lock-based class)** — was the verbatim app
+  actor until S5; an actor forces a Task spawn per heard advertisement on
+  the scan path. Same surface and semantics; Android-parity shape.
+- **BleScanner (Darwin) never prompts**: creating CBCentralManager fires the
+  system dialog, so start() refuses while authorization is .notDetermined
+  and reports unauthorized — the dormancy poll re-enters after the host's
+  own flow. The app's O2-primer prepare() dance has no SDK counterpart.
+  SDK-namespaced restore ID; per-EID throttle via the shared EidThrottle
+  (3 s).
+- **No adaptive scan machinery in v1** (app duty cycle, Android ScanPolicy,
+  battery receiver): the app's 10s/30s cycle is a FOREGROUND product
+  feature, and an embedded SDK is background-first where iOS already
+  coalesces service-filtered scans. scan_mode is omitted from heartbeats
+  (optional field). Revisit with real partner battery numbers; until then
+  the 300 s heartbeat + OS-coalesced background scanning is the battery
+  story.
+- **CoreLocationSource (Darwin)**: fixed moderate profile (NearestTenMeters,
+  10 m filter) — the app's 1.3 CoreMotion power ladder is NOT ported
+  (determinism on someone else's battery) and neither is the fixed-location
+  override (coverage-spoofing lever, same call as Android).
+  allowsBackgroundLocationUpdates is set ONLY when the host's Info.plist
+  declares the location background mode — setting it without one throws
+  into the host.
+- **gps_status composition moved into Engine** (dongle_missing/fix/no_fix)
+  so the LocationSource seam stays minimal; Android kept it in
+  LocationProvider.
+- **Facade still runs S1 stub transitions** — EEGateway↔Engine wiring lands
+  in S6 with provisioning + kill switch (Android did the wiring in C5, but
+  its facade tests were stub-level; ours assert real behavior, so the
+  wiring moves with the state machine it completes).
