@@ -53,7 +53,7 @@ Reviewed and ACCEPTED as-is (all Android-parity):
 | S4 | TokenStore protocol + KeychainTokenStore + TokenProvision (verify-before-persist) | DONE 11/6 (151 tests on Linux; +3 Keychain tests Darwin-only) |
 | S5 | Pipeline: loops, PacketRadio/LocationSource seams + Darwin adapters, Engine, dormancy gate | DONE 11/6 (180 tests) |
 | S6 | Guardrails: ProvisionRunner + wiring, PAUSED_REMOTE kill switch, publicId, facade↔engine wiring | DONE 11/6 (198 tests) |
-| S7 | Minimal sample app (Xcode project — John's Mac) | open |
+| S7 | Minimal sample app | PREPARED 11/6 (Sample/ sources + Xcode runbook; project creation + device run = John's Mac) |
 
 ## Toolchain / harness
 
@@ -267,3 +267,18 @@ Reviewed and ACCEPTED as-is (all Android-parity):
 - **Engine default-arg hazard**: Engine's default `mint` hits production
   ee-web — every test MUST inject a mint stub (all current ones do; the
   guardrail suite's makeEngine defaults it to rejected).
+
+## S7 prep + C10 draft (11/6)
+
+- `Sample/EESampleApp.swift`: one-screen SwiftUI host (permission primers,
+  self-mint toggle / token paste, Start/Stop, live status via setListener).
+  Deliberately owns what the SDK refuses to: the permission prompts.
+  `Sample/README.md` is the 10-minute Xcode runbook + the S7 dogfood script
+  (self-mint run, org-token run, kill-switch pass).
+- `docs/INTEGRATION.md`: the C10 partner guide, draft. Org API endpoint
+  verified against ee-web routes + controller (POST /api/v1/org/gateways
+  with name → gateway + token.key). EE copy voice rules applied. Ships as
+  C10 after dogfood.
+- Sample sources can't compile in the Linux harness (SwiftUI/UIKit); they
+  are excluded from the SPM package (live outside Sources/) and John's
+  Xcode build is their compile check — same trust model as Android C8.
