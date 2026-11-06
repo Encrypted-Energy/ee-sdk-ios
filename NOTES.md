@@ -11,7 +11,7 @@ C9/C10. Extraction source: `gateway-ios` branch `anonymous-first-onboarding`
 |---|---|---|
 | S1 | SPM scaffold, frozen public API (EEGateway/EEConfig/EEStatus/EEState/EEListener), Linux harness | DONE 11/6 |
 | S2 | Pure core: HubblePacketParser, Counters, DeviceRollup, UploadPacket, PacketQueue + QueueStore (de-SwiftData'd), EidThrottle, Backoff | DONE 11/6 (66 tests) |
-| S3 | Headless EEClient (mint, claim-status, ingest, heartbeat; URLSession) + packet/heartbeat payload builders (they live inside the app's EEClient, so they port here, not S2) | open |
+| S3 | Headless EEClient + BatchSender + payload builders (Json/PacketJson/HeartbeatPayload/LocationFix) | DONE 11/6 (141 tests) |
 | S4 | TokenStore (Keychain; protocol seam so logic tests on Linux) | open |
 | S5 | Pipeline: CBCentralManager scanner + CoreLocation via seams, loops, Engine, dormancy gate | open |
 | S6 | Guardrails: ProvisionRunner, PAUSED_REMOTE kill switch, publicId from heartbeat | open |
@@ -86,3 +86,41 @@ C9/C10. Extraction source: `gateway-ios` branch `anonymous-first-onboarding`
   seeded determinism. All Android test cases carried 1:1, plus a new
   onChange-fires-on-mutations-only case and a schedulePersist coalescing
   case.
+
+## S3 decisions
+
+- **EEClient = app client + Android SDK deltas.** Response mapping is the
+  shipped app's (verified vs ee-web controllers 7/12); SDK deltas mirror
+  Android: claim flow REMOVED (no end user in a fleet SDK), verify() ADDED
+  (verify-before-persist, S4), heartbeat 2xx parsed for `disable` +
+  `gateway.public_id`, token via provider closure (rotation after
+  provisioning).
+- **Transport seam.** The wire call is `(URLRequest) async -> (Data, Int)?`
+  injected at init — something HttpURLConnection never allowed Android, so
+  this port adds endpoint-level tests (method/headers/body shaping, status
+  mapping, no-call-without-token) on top of the pure-mapper suite carried
+  1:1. Production transport wraps `URLSession.dataTask` in a continuation
+  (works on Linux FoundationNetworking; `URLSession.data(for:)` does not
+  exist there in all toolchains).
+- **Json.swift is the Android ordered writer, write-half only.** Response
+  parsing rides JSONSerialization instead of porting the hand-rolled
+  parser; writing stays hand-rolled because neither JSONEncoder nor
+  JSONSerialization guarantees key order, and wire-parity tests pin exact
+  body strings (iOS 1.2 production fixture). Kotlin's unchecked
+  IllegalArgumentException on non-finite doubles became a thrown
+  `Json.WriteError` — PacketJson is `throws`; BatchSender catches and maps
+  to transient (same behavior Android's catch-all gives).
+- **HeartbeatPayload.build is non-throwing** (`try?` + unreachable "{}"
+  fallback): none of its field types can hold a non-finite Double, and the
+  heartbeat loop must never throw. `worker_version` = `ee-sdk-ios/<ver>` so
+  ops can tell SDK traffic from the first-party app. devices_seen bridges
+  the verbatim DeviceRollup dictionary through JSONSerialization
+  (`heartbeatRaw`) — key order inside the block is unspecified, server
+  doesn't care.
+- **BatchSender ported 1:1** including the 413 halving ladder and
+  stop-and-requeue ordering. SDK keeps the Android/server batch contract
+  (500/chunk), NOT the app's modest 10/batch — one fleet phone drains a
+  long-offline queue in two calls instead of a hundred.
+- **ios-platform mint**: mintDevice sends `"platform":"ios"`; attestation
+  stays omitted (server runs DEVICE_ATTESTATION=log) — revisit when the
+  DeviceCheck build lands in the app, same caveat as Android.
