@@ -34,18 +34,25 @@ final class Engine {
     /// first-party app sharing the container.
     static let queueFileName = "com.encryptedenergy.sdk.packet-queue.eeq"
 
+    private let config: EEConfig
+    private let tokenStore: TokenStore
+    private let client: EEClient
     private let radio: PacketRadio
     private let location: LocationSource
     private let permissionsCheck: () -> Bool
     private let onChanged: () -> Void
     private let osVersion: String
+    private let defaultDeviceName: () -> String
+    private let mint: (String) async -> EEClient.MintResult
     private let pollInterval: TimeInterval
+    private var provisionTask: Task<Void, Never>?
 
     let counters = Counters()
     private let queue: PacketQueue
     private let store: QueueStore
-    private var heartbeatLoop: HeartbeatLoop!
-    private var uploadLoop: UploadLoop!
+    // Internal (not private) so guardrail tests can drive a tick directly.
+    var heartbeatLoop: HeartbeatLoop!
+    var uploadLoop: UploadLoop!
 
     /// All pipeline mutation happens here; radio/location callbacks arrive
     /// here (Darwin adapters are constructed with this queue).
@@ -58,24 +65,37 @@ final class Engine {
     private var _packetsForwarded: Int64 = 0
     private var _lastHeartbeatAt: Int64?
     private var _lastPacketAtMillis: Int64?
+    private var _gatewayPublicId: String?
     private var _started = false
     private var _scanning = false
+    private var _remotePaused = false
     private var rollup = DeviceRollup()
 
     private let startedAt = Date()
 
     init(
+        config: EEConfig = .selfMint(),
+        tokenStore: TokenStore = InMemoryTokenStore(),
         client: EEClient,
         radio: PacketRadio,
         location: LocationSource,
         permissionsGranted: @escaping () -> Bool,
         queueFileURL: URL,
         osVersion: String,
+        defaultDeviceName: @escaping () -> String = { "unknown" },
+        mint: ((String) async -> EEClient.MintResult)? = nil,
         queue: PacketQueue = PacketQueue(),
         workQueue: DispatchQueue = DispatchQueue(label: "ee-sdk-engine"),
         pollInterval: TimeInterval = Engine.defaultPollInterval,
         onChanged: @escaping () -> Void
     ) {
+        self.config = config
+        self.tokenStore = tokenStore
+        self.client = client
+        self.defaultDeviceName = defaultDeviceName
+        self.mint = mint ?? { deviceName in
+            await EEClient.mintDevice(deviceName: deviceName, baseUrl: config.baseUrl)
+        }
         self.radio = radio
         self.location = location
         self.permissionsCheck = permissionsGranted
@@ -109,11 +129,14 @@ final class Engine {
             runtimeInfo: { [weak self] in self?.runtimeInfo() ?? Engine.emptyRuntime }
         ) { [weak self] result in
             guard let self else { return }
-            if case .ok = result {
+            if case .ok(_, _, let disable, let publicId) = result {
                 self.stateLock.lock()
                 self._lastHeartbeatAt = Int64(Date().timeIntervalSince1970 * 1000)
+                if let publicId { self._gatewayPublicId = publicId }
                 self.stateLock.unlock()
-                // S6 acts on `disable` and captures publicId here.
+                // The kill switch acts on workQueue with the rest of the
+                // pipeline lifecycle.
+                self.workQueue.async { self.applyRemoteDisable(disable) }
             }
             self.onChanged()
         }
@@ -135,10 +158,13 @@ final class Engine {
     var pingsHeard: Int64 { stateLock.lock(); defer { stateLock.unlock() }; return _pingsHeard }
     var packetsForwarded: Int64 { stateLock.lock(); defer { stateLock.unlock() }; return _packetsForwarded }
     var lastHeartbeatAt: Int64? { stateLock.lock(); defer { stateLock.unlock() }; return _lastHeartbeatAt }
+    var gatewayPublicId: String? { stateLock.lock(); defer { stateLock.unlock() }; return _gatewayPublicId }
     /// Host asked us to run (start() without a matching stop()).
     var started: Bool { stateLock.lock(); defer { stateLock.unlock() }; return _started }
     /// Radio + GPS actually up — false while dormant on missing grants.
     var scanning: Bool { stateLock.lock(); defer { stateLock.unlock() }; return _scanning }
+    /// Server kill switch is ON: pipeline+upload parked, heartbeats flowing.
+    var remotePaused: Bool { stateLock.lock(); defer { stateLock.unlock() }; return _remotePaused }
 
     func queueDepth() -> Int { queue.size() }
     func permissionsGranted() -> Bool { permissionsCheck() }
@@ -146,14 +172,16 @@ final class Engine {
     // MARK: - Lifecycle (any thread)
 
     /// Begin: loops immediately (heartbeats make dormant phones visible to
-    /// ops), pipeline when the grants allow. Idempotent.
+    /// ops), provisioning reconciliation in the background, pipeline when
+    /// the grants allow. Idempotent.
     func start() {
         stateLock.lock()
         if _started { stateLock.unlock(); return }
         _started = true
         stateLock.unlock()
         heartbeatLoop.start()
-        uploadLoop.start()
+        if !remotePaused { uploadLoop.start() }
+        provisionIfNeeded()
         workQueue.async { [weak self] in self?.maybeStartPipeline() }
     }
 
@@ -163,15 +191,99 @@ final class Engine {
         if !_started { stateLock.unlock(); return }
         _started = false
         stateLock.unlock()
+        provisionTask?.cancel()   // cancels a backoff sleep
+        provisionTask = nil
         heartbeatLoop.stop()
         uploadLoop.stop()
         workQueue.async { [weak self] in self?.stopPipeline() }
     }
 
+    // MARK: - Provisioning (S6: the S4 invariants wired live)
+
+    /// Reconcile the stored token with the config on a background task —
+    /// verify-before-persist / mint-persists-only-on-yes, retried through
+    /// ProvisionRunner. No-op when the store already matches. The loops only
+    /// ever read through the store, so until the server says yes they run
+    /// against the previous token — or none, where upload requeues and
+    /// heartbeat goes unauthorized, both safe.
+    private func provisionIfNeeded() {
+        provisionTask = Task.detached(priority: .utility) { [weak self] in
+            guard let self, self.needsProvisioning() else { return }
+            let runner = ProvisionRunner(
+                attempt: { await self.provisionAttempt() },
+                sleep: { millis in
+                    try? await Task.sleep(nanoseconds: UInt64(millis) * 1_000_000)
+                    return !Task.isCancelled
+                }
+            )
+            let result = await runner.run(isActive: { self.started && !Task.isCancelled })
+            if result == .provisioned {
+                // Immediate hello: telemetry, `disable`, and the public id
+                // land now, not one 5-min cadence later.
+                await self.heartbeatLoop.tick()
+            }
+            self.onChanged()
+        }
+    }
+
+    /// Keychain read — background task only.
+    private func needsProvisioning() -> Bool {
+        switch config {
+        case .gatewayToken(let token, _): return tokenStore.load() != token
+        case .selfMint: return tokenStore.load() == nil
+        }
+    }
+
+    private func provisionAttempt() async -> ProvisionRunner.Outcome {
+        switch config {
+        case .gatewayToken(let token, _):
+            switch await TokenProvision.injectToken(
+                token,
+                verify: { await self.client.verify(tokenOverride: $0) },
+                persist: { self.tokenStore.save($0) }
+            ) {
+            case .verified: return .provisioned
+            case .rejected: return .rejected
+            case .retry: return .retry
+            }
+        case .selfMint(let deviceName, _):
+            switch await TokenProvision.selfMint(
+                deviceName: deviceName ?? defaultDeviceName(),
+                mint: mint,
+                persist: { token, name in
+                    self.tokenStore.save(token)
+                    self.tokenStore.saveGatewayName(name)
+                }
+            ) {
+            case .provisioned: return .provisioned
+            case .rejected: return .rejected
+            case .retry: return .retry
+            }
+        }
+    }
+
+    /// The C9 kill switch, read from every heartbeat 2xx. workQueue only.
+    /// ON: pipeline + upload park, heartbeats keep flowing (they're the only
+    /// way to learn the flag cleared). OFF: resume what the grants allow.
+    private func applyRemoteDisable(_ disable: Bool) {
+        guard disable != remotePaused else { return }
+        stateLock.lock()
+        _remotePaused = disable
+        stateLock.unlock()
+        if disable {
+            stopPipeline()
+            uploadLoop.stop()
+        } else if started {
+            uploadLoop.start()
+            maybeStartPipeline()
+        }
+        onChanged()
+    }
+
     // MARK: - Pipeline (workQueue only)
 
     private func maybeStartPipeline() {
-        guard started, !scanning else { return }
+        guard started, !scanning, !remotePaused else { return }
         if permissionsCheck() {
             startPipeline()
         } else {
@@ -185,7 +297,7 @@ final class Engine {
     /// flags and is a no-op after stop().
     private func schedulePermissionPoll() {
         workQueue.asyncAfter(deadline: .now() + pollInterval) { [weak self] in
-            guard let self, self.started, !self.scanning else { return }
+            guard let self, self.started, !self.scanning, !self.remotePaused else { return }
             if self.permissionsCheck() {
                 self.startPipeline()
                 self.onChanged()
@@ -196,7 +308,7 @@ final class Engine {
     }
 
     private func startPipeline() {
-        guard !scanning else { return }
+        guard !scanning, !remotePaused else { return }
         location.start()
         setScanning(true)
         radio.start()

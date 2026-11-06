@@ -52,7 +52,7 @@ Reviewed and ACCEPTED as-is (all Android-parity):
 | S3 | Headless EEClient + BatchSender + payload builders (Json/PacketJson/HeartbeatPayload/LocationFix) | DONE 11/6 (141 tests) |
 | S4 | TokenStore protocol + KeychainTokenStore + TokenProvision (verify-before-persist) | DONE 11/6 (151 tests on Linux; +3 Keychain tests Darwin-only) |
 | S5 | Pipeline: loops, PacketRadio/LocationSource seams + Darwin adapters, Engine, dormancy gate | DONE 11/6 (180 tests) |
-| S6 | Guardrails: ProvisionRunner wiring, PAUSED_REMOTE kill switch, publicId, facade↔engine wiring | open |
+| S6 | Guardrails: ProvisionRunner + wiring, PAUSED_REMOTE kill switch, publicId, facade↔engine wiring | DONE 11/6 (198 tests) |
 | S7 | Minimal sample app (Xcode project — John's Mac) | open |
 
 ## Toolchain / harness
@@ -235,3 +235,35 @@ Reviewed and ACCEPTED as-is (all Android-parity):
   in S6 with provisioning + kill switch (Android did the wiring in C5, but
   its facade tests were stub-level; ours assert real behavior, so the
   wiring moves with the state machine it completes).
+
+## S6 decisions
+
+- **ProvisionRunner ported 1:1** (6 tests); Android's InterruptedException
+  becomes a cancelled Task — the injected sleep returns false and the run
+  abandons. Engine stop() cancels the provisioning task mid-backoff.
+- **Provisioning wired live on every start()**: stored-token/config
+  reconcile on a detached utility Task — gatewayToken mismatch runs
+  verify-before-persist (the verify carries the INJECTED token, pinned by
+  test), selfMint with an empty store mints; rejection parks until the next
+  start; success fires one immediate heartbeat so telemetry/disable/publicId
+  land in seconds, not one 300 s cadence later. Matching store = no wire
+  call (pinned).
+- **Kill switch**: heartbeat 2xx `disable:true` → pipeline + upload park,
+  heartbeats continue (they're how the flag clears), facade shows
+  pausedRemote; clearing resumes what the grants allow. Applied on
+  workQueue with the rest of the pipeline lifecycle. Guardrail tests drive
+  it end-to-end through a stubbed transport + direct heartbeat ticks (the
+  loops are internal-visible for exactly this).
+- **Facade↔engine wiring landed** (the piece deliberately held back from
+  S5): start() builds the engine through `engineFactory` (internal seam —
+  Darwin default wires BleScanner/CoreLocationSource/KeychainTokenStore/
+  ScanPermissions + Application Support queue file; a no-radio platform
+  gets the inert NullPipeline and parks in awaitingPermissions honestly).
+  Config change from a non-running state tears down and rebuilds (pinned).
+  engineChanged coalesces to one refresh per `refreshCoalesceMillis`
+  (~1/s in production; pinned by the 100-beacons-≤3-callbacks test).
+  The facade suite now asserts REAL pipeline behavior through fake seams —
+  Android's facade was never testable at this level.
+- **Engine default-arg hazard**: Engine's default `mint` hits production
+  ee-web — every test MUST inject a mint stub (all current ones do; the
+  guardrail suite's makeEngine defaults it to rejected).
