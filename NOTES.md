@@ -100,8 +100,9 @@ Reviewed and ACCEPTED as-is (all Android-parity):
 - **HubblePacketParser extracted verbatim** from the app; fixture tests
   carried verbatim PLUS the Android SDK's v2 high-bit EID vector, so both
   platforms run an identical fixture set (8 tests).
-- **Counters extracted verbatim** (it's an `actor` in the app; kept — tests
-  are async). `droppedNoEID` stays local-only (§1a: no server field).
+- **Counters extracted verbatim** at S2 (app actor). SUPERSEDED in S5:
+  became a lock-based class (see S5 decisions). `droppedNoEID` stays
+  local-only (§1a: no server field).
 - **DeviceRollup extracted verbatim.** Known cross-platform delta kept
   as-shipped: iOS caps the heartbeat block at top-50 **by packet count**;
   the Android SDK caps by recency and clamps last-seen monotonic. Shipped-app
