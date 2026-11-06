@@ -60,6 +60,18 @@ final class PacketQueueTests: XCTestCase {
         XCTAssertLessThanOrEqual(PacketQueue.maxBatch, 500)
     }
 
+    func testOnChangeMayReenterTheQueue() {
+        // Kotlin @Synchronized is reentrant, so Android permits an onChange
+        // handler that reads the queue. The Swift port must match — with a
+        // plain NSLock this deadlocks (hangs the host), not crashes.
+        let q = PacketQueue()
+        var depthsSeen: [Int] = []
+        q.onChange = { depthsSeen.append(q.size()) }
+        q.add(packet(1))
+        q.add(packet(2))
+        XCTAssertEqual(depthsSeen, [1, 2])
+    }
+
     func testOnChangeFiresOnMutationsOnly() {
         let q = PacketQueue()
         var fires = 0

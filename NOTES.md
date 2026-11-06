@@ -5,6 +5,44 @@ the Android arc (ee-sdk-android C1–C10); iOS chunks are S1–S7 + shared
 C9/C10. Extraction source: `gateway-ios` branch `anonymous-first-onboarding`
 (131c3f5) — the shipped 1.5 app.
 
+## Review (post-S3, 11/6): findings and fixes
+
+Full S1–S3 pass against the plan contracts (never-throws, never-prompts,
+zero deps, frozen surface), the verbatim-extraction claims, threading, and
+harness honesty. One finding fixed:
+
+1. **PacketQueue's lock had to be recursive.** Kotlin's @Synchronized is
+   reentrant, so on Android an onChange handler that reads the queue
+   (size(), snapshot()) is legal. The Swift port used NSLock, which
+   self-deadlocks on reentry — an onChange wired that way in S5 would HANG
+   the host app, the one failure mode worse than a crash for an embedded
+   SDK. Fixed: NSRecursiveLock + a regression test that reenters from the
+   handler (hangs under NSLock, passes now).
+
+Verified clean:
+
+- **Verbatim claims are byte-identical** — diffed HubblePacketParser,
+  Counters, DeviceRollup against gateway-ios 131c3f5: comment-only deltas.
+- **Public surface is exactly the frozen API** (grep-audited): EEGateway's
+  five members + version, EEConfig (+factories/baseUrl), EEStatus, EEState,
+  EEListener. Test seams (callbackQueue, _resetForTests) are internal.
+- **No crash vectors in Sources/**: zero force-unwraps, try!, as!,
+  fatalError, precondition.
+- **Harness honesty verified both directions**: injected XCTFail → exit 1
+  with the failure printed; count pin fails if the suite shrinks below the
+  expected floor.
+
+Reviewed and ACCEPTED as-is (all Android-parity):
+
+- isoUtc builds a DateFormatter per call — heartbeats are 300 s apart.
+- EidThrottle's map is unbounded — bounded in practice by unique EIDs/24 h,
+  same as both shipped apps.
+- A partner baseUrl with a trailing slash yields `//api/...` — server
+  tolerates; same on Android.
+- JSONSerialization bridging quirk: on Darwin `{"disable":1}` would parse
+  as true, on Linux false. ee-web sends real JSON booleans, so unreachable;
+  noting it because the Linux harness can't prove the Darwin branch.
+
 ## Arc map
 
 | Chunk | Scope | Status |

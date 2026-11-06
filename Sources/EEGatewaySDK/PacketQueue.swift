@@ -12,13 +12,17 @@ import Foundation
 ///
 /// Port of ee-sdk-android PacketQueue. Android's @Volatile onChange becomes
 /// lock-guarded access here — same visibility guarantee, one mechanism.
+/// The lock is RECURSIVE because Kotlin's @Synchronized is reentrant: an
+/// onChange handler that touches the queue again (size(), snapshot()) is
+/// legal on Android, so it must not hard-deadlock the host here — a hang is
+/// the one failure mode worse than a crash for an embedded SDK.
 final class PacketQueue {
 
     static let defaultCapacity = 1_000
     /// ee-web MAX_PACKETS_PER_REQUEST — larger batches 413.
     static let maxBatch = 500
 
-    private let lock = NSLock()
+    private let lock = NSRecursiveLock()
     private var deque: [UploadPacket] = []
     private var changeHandler: (() -> Void)?
     private let capacity: Int
