@@ -85,5 +85,4 @@ flow, both identity modes, and live status. `Sample/README.md` has the
 
 ---
 
-*Draft status: ships as C10 after first-device dogfood. Android
-counterpart: `Encrypted-Energy/ee-sdk-android`.*
+*Android counterpart: `Encrypted-Energy/ee-sdk-android`.*

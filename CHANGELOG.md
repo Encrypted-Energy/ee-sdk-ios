@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.1.0 candidate)
+## 0.1.0 — 2026-11-07
 
 First extraction arc (S1–S6 + S7 sample), built 2026-11-06 from the shipped
 gateway-ios 1.5 sources and the ee-sdk-android contracts:
@@ -18,4 +18,6 @@ gateway-ios 1.5 sources and the ee-sdk-android contracts:
 - 198-test Linux harness + Darwin-only Keychain tests; sample host app and
   integration guide in `Sample/` and `docs/`.
 
-Tag 0.1.0 after first-device dogfood (S7 runbook in Sample/README.md).
+First-device dogfood PASSED 2026-11-07 (gateway 408: provisioning,
+heartbeats, 113 heard / 9 forwarded accepted under the org, GPS stamping,
+devices rollup — zero EE credentials in the binary).
