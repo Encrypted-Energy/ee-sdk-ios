@@ -45,7 +45,7 @@ server before it's ever persisted, so a revoked or mistyped token can't
 poison a phone. Rotation: hand the device a new token, call
 `configure` + `start` again.
 
-API-created gateways default to `"email_alerts": false` — fleet installs
+API-created gateways default to `"email_alerts": false`: fleet installs
 go quiet every shift end, and nobody wants a thousand outage emails. Pass
 `"email_alerts": true` on create to opt a specific gateway in.
 
