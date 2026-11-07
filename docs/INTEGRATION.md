@@ -1,6 +1,7 @@
-# EE Gateway SDK for iOS — Integration Guide (draft)
+# EE Gateway SDK for iOS — Integration Guide
 
-Turn your fleet's iPhones into Encrypted Energy gateways. Two lines:
+Turn the iPhones running your app into Encrypted Energy gateways. Two
+lines:
 
 ```swift
 EEGateway.configure(.gatewayToken(token: tokenFromYourBackend))
@@ -16,7 +17,8 @@ per day.
 ## Requirements
 
 - iOS 15+, Swift Package Manager. Zero dependencies.
-- Your app already holds Bluetooth and location grants (fleet apps do).
+- Your app already holds Bluetooth and location grants (tracker,
+  fitness, automotive, and field-ops apps do).
 - Info.plist: `NSBluetoothAlwaysUsageDescription`, your existing location
   usage strings, and the `bluetooth-central` background mode. Add the
   `location` background mode if you want fixes while backgrounded; without
@@ -67,10 +69,10 @@ production path (per-device orgs skew fleet economics).
   iOS itself. Packets queue locally (bounded) and upload in batches on a
   10 second cadence; an offline phone holds up to 1,000 packets and drains
   oldest-first when the network returns.
-- **The fleet kill switch is yours.** Flip `gateways_paused` on your org
-  and every SDK phone parks within one heartbeat: scanning and upload stop,
-  heartbeats keep flowing so un-pausing takes effect just as fast. No app
-  release needed.
+- **There's a fleet kill switch.** One `gateways_paused` flag on your org
+  (we flip it on request; self-serve toggle coming) parks every SDK phone
+  within one heartbeat: scanning and upload stop, heartbeats keep flowing
+  so un-pausing takes effect just as fast. No app release needed.
 
 ## What you can read
 
