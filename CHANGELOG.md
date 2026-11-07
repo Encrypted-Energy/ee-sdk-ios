@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Relicensed from GPL-3.0 (dual) to Apache-2.0; COMMERCIAL-LICENSE.md
+  removed (no separate commercial license needed for proprietary apps).
+
 ## 0.1.0 — 2026-11-07
 
 First extraction arc (S1–S6 + S7 sample), built 2026-11-06 from the shipped

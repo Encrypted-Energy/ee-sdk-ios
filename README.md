@@ -16,6 +16,11 @@ extraction in progress — see NOTES.md for the arc map.
 
 Android counterpart: `Encrypted-Energy/ee-sdk-android`.
 
+## License
+
+Apache-2.0 (see [LICENSE](LICENSE)). Use it in proprietary apps, no strings
+attached.
+
 ## Tests
 
 ```

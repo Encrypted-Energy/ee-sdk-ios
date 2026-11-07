@@ -30,8 +30,8 @@ or deploy key while the repo is private) and pin a version rule.
 Xcode → Add Package Dependencies →
 `https://github.com/Encrypted-Energy/ee-sdk-ios.git` with a GitHub account
 that has read access (or SSH). Dependency rule: Up to Next Minor from the
-tagged version. Goes public (or stays private per the commercial-license
-path) when C0 settles the terms.
+tagged version. Goes public when C0 settles the terms (the SDK is
+Apache-2.0, so proprietary hosts need no separate license).
 
 ## CI (one-time setup)
 
