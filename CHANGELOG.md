@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 — 2026-11-07
 
 - Relicensed from GPL-3.0 (dual) to Apache-2.0; COMMERCIAL-LICENSE.md
   removed (no separate commercial license needed for proprietary apps).
+  Docs-only release: no source changes vs 0.1.0.
 
 ## 0.1.0 — 2026-11-07
 
