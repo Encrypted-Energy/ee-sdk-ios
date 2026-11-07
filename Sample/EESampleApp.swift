@@ -68,7 +68,18 @@ struct ContentView: View {
                 }
 
                 Section("Live status") {
-                    row("State", "\(status.state)")
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(stateColor)
+                            .frame(width: 12, height: 12)
+                        Text(stateLabel)
+                            .bold()
+                        Spacer()
+                        if status.state == .running {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .foregroundColor(.green)
+                        }
+                    }
                     row("Pings heard", "\(status.pingsHeard)")
                     row("Forwarded", "\(status.packetsForwarded)")
                     row("Queue depth", "\(status.queueDepth)")
@@ -83,6 +94,26 @@ struct ContentView: View {
             // so assigning into @State directly is safe.
             EEGateway.setListener { status = $0 }
             status = EEGateway.status()
+        }
+    }
+
+    private var stateColor: Color {
+        switch status.state {
+        case .running: return .green
+        case .awaitingPermissions, .pausedRemote: return .orange
+        case .ready: return .blue
+        case .unconfigured, .stopped: return .gray
+        }
+    }
+
+    private var stateLabel: String {
+        switch status.state {
+        case .unconfigured: return "Not configured"
+        case .ready: return "Ready — tap Start"
+        case .awaitingPermissions: return "Waiting for permissions…"
+        case .running: return "RUNNING — relaying"
+        case .pausedRemote: return "Paused by fleet kill switch"
+        case .stopped: return "Stopped"
         }
     }
 
