@@ -1,0 +1,17 @@
+# Linux CI: the same harness that gates every chunk, on every push. The
+# Darwin-only coverage (Keychain round-trips, CoreBluetooth/CoreLocation
+# adapter compilation) still needs a Mac `swift test` — see RELEASING.md.
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  swift-test:
+    runs-on: ubuntu-24.04
+    container: swift:6.0.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run harness
+        run: SWIFT=swift ./runtests.sh
