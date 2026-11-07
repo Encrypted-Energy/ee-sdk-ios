@@ -10,7 +10,7 @@ gateway-ios 1.5 sources and the ee-sdk-android contracts:
 - Full pipeline: FCA6 scan (service-filtered CBCentralManager), per-EID
   throttle, fresh-fix stamping with the 25 s staleness gate, bounded
   persistent packet queue, batched ingest with the published 413/422
-  contract, 5-minute heartbeats with delta snapshot/restore.
+  contract, 3-minute heartbeats with delta snapshot/restore.
 - Identity: gateway-token mode with verify-before-persist into the
   Keychain; self-mint demo mode; fleet kill switch (`pausedRemote`).
 - Contracts: never throws, never prompts, no background modes of its own,
