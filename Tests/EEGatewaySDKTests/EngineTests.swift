@@ -9,6 +9,7 @@ final class EngineTests: XCTestCase {
     private var radio = FakeRadio()
     private var location = FakeLocation()
     private var granted = true
+    private var lowPowerFlag = false
     private var queue = PacketQueue()
 
     override func setUp() {
@@ -16,10 +17,15 @@ final class EngineTests: XCTestCase {
         radio = FakeRadio()
         location = FakeLocation()
         granted = true
+        lowPowerFlag = false
         queue = PacketQueue()
     }
 
-    private func makeEngine(pollInterval: TimeInterval = 0.05) -> Engine {
+    private func makeEngine(
+        pollInterval: TimeInterval = 0.05,
+        gateInterval: TimeInterval = 0.05,
+        hostApp: String? = nil
+    ) -> Engine {
         Engine(
             client: EEClient(tokenProvider: { "ee_live_t" }, transport: { _ in nil }),
             radio: radio,
@@ -31,6 +37,9 @@ final class EngineTests: XCTestCase {
             mint: { _ in .rejected(reason: "test: no network") },
             queue: queue,
             pollInterval: pollInterval,
+            lowPower: { self.lowPowerFlag },
+            hostApp: hostApp,
+            gateInterval: gateInterval,
             onChanged: {}
         )
     }
@@ -257,6 +266,68 @@ final class EngineTests: XCTestCase {
         engine.start()
         drain(engine)
         XCTAssertEqual(engine.runtimeInfo().gpsStatus, "no_fix")
+        engine.stop()
+        drain(engine)
+    }
+
+    // MARK: RadioGate wiring (0.2.0 — the policy itself is RadioGateTests)
+
+    func testStartInLowPowerParksRadioFromBirth() {
+        lowPowerFlag = true
+        let engine = makeEngine()
+        engine.start()
+        drain(engine)
+        XCTAssertEqual(radio.startCalls, 0, "radio must not start under LPM")
+        XCTAssertEqual(location.startCalls, 1, "location is the recovery signal")
+        XCTAssertTrue(engine.scanning)
+        XCTAssertTrue(engine.radioParked)
+        let runtime = engine.runtimeInfo()
+        XCTAssertEqual(runtime.scanMode, "paused")
+        XCTAssertEqual(runtime.clientState, "backgrounded")
+        engine.stop()
+        drain(engine)
+    }
+
+    func testLpmParksMidRunAndLiftingResumes() {
+        let engine = makeEngine(gateInterval: 0.05)
+        engine.start()
+        drain(engine)
+        XCTAssertEqual(radio.startCalls, 1)
+        lowPowerFlag = true
+        Thread.sleep(forTimeInterval: 0.15)
+        drain(engine)
+        XCTAssertEqual(radio.stopCalls, 1, "gate tick must park the radio")
+        XCTAssertTrue(engine.radioParked)
+        lowPowerFlag = false
+        Thread.sleep(forTimeInterval: 0.15)
+        drain(engine)
+        XCTAssertEqual(radio.startCalls, 2, "lifting LPM must resume")
+        XCTAssertFalse(engine.radioParked)
+        engine.stop()
+        drain(engine)
+    }
+
+    func testStopWhileParkedDoesNotDoubleStopTheRadio() {
+        lowPowerFlag = true
+        let engine = makeEngine()
+        engine.start()
+        drain(engine)
+        XCTAssertTrue(engine.radioParked)
+        engine.stop()
+        drain(engine)
+        XCTAssertEqual(radio.stopCalls, 0, "radio never started; nothing to stop")
+        XCTAssertEqual(location.stopCalls, 1)
+        XCTAssertFalse(engine.radioParked)
+    }
+
+    func testHostAppAndDefaultScanModeReachRuntime() {
+        let engine = makeEngine(hostApp: "com.example.host")
+        engine.start()
+        drain(engine)
+        let runtime = engine.runtimeInfo()
+        XCTAssertEqual(runtime.hostApp, "com.example.host")
+        XCTAssertNil(runtime.scanMode, "no adaptive policy: scan_mode omitted unless parked")
+        XCTAssertEqual(runtime.clientState, "active")
         engine.stop()
         drain(engine)
     }

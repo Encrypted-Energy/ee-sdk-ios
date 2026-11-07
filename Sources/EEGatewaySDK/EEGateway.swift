@@ -229,6 +229,10 @@ public enum EEGateway {
             osVersion: platformOSVersion,
             defaultDeviceName: { platformDeviceName },
             workQueue: workQueue,
+            // RadioGate inputs (0.2.0): Low Power Mode mirrors the shipped
+            // app's LPM pause; the bundle id feeds per-app fleet grouping.
+            lowPower: { ProcessInfo.processInfo.isLowPowerModeEnabled },
+            hostApp: Bundle.main.bundleIdentifier,
             onChanged: onChanged
         )
         #else

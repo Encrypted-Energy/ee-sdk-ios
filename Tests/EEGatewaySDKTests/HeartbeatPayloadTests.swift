@@ -91,6 +91,15 @@ final class HeartbeatPayloadTests: XCTestCase {
         XCTAssertTrue(json.contains("\"scan_mode\":\"reduced\""), json)
     }
 
+    func testOmitsHostAppWhenAbsent() {
+        XCTAssertFalse(HeartbeatPayload.build(runtime, deltas).contains("host_app"))
+    }
+
+    func testIncludesHostAppWhenPresent() {
+        let json = HeartbeatPayload.build(with { $0.hostApp = "com.example.host" }, deltas)
+        XCTAssertTrue(json.contains("\"host_app\":\"com.example.host\""), json)
+    }
+
     func testIsoUtcIsStable() {
         // 1783780342 unix seconds is the plan §1a fixture timestamp.
         XCTAssertEqual(HeartbeatPayload.isoUtc(1_783_780_342_000), "2026-07-11T14:32:22Z")

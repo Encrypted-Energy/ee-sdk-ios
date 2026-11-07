@@ -34,6 +34,18 @@ final class DeviceRollupTests: XCTestCase {
         XCTAssertNotNil(rollup.entries["fresh"])
     }
 
+    func testHeartbeatRawPrunesOnTime() {
+        // 0.2.0 item vii: a quiet radio never calls heard(), so the
+        // heartbeat path itself must prune — devices_seen may not report
+        // rows older than the window it claims.
+        var rollup = DeviceRollup()
+        rollup.heard(eid: "stale", rssi: -70, at: t0)
+        let raw = rollup.heartbeatRaw(now: t0.addingTimeInterval(DeviceRollup.window + 1))
+        XCTAssertNotNil(raw)
+        XCTAssertFalse(raw!.text.contains("stale"), raw!.text)
+        XCTAssertNil(rollup.entries["stale"])
+    }
+
     func testHeartbeatCapsAtTopFiftyByPacketCount() {
         var rollup = DeviceRollup()
         for i in 0..<60 {

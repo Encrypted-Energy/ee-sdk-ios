@@ -25,8 +25,16 @@ enum HeartbeatPayload {
         var clientState: String? = nil
         /// DeviceRollup.heartbeatRaw output — devices_seen block (0005+).
         var devicesSeen: Json.Raw? = nil
-        /// "full" | "reduced" — scan-policy state (0009+).
+        /// "paused" while RadioGate parks the radio (0.2.0); nil otherwise
+        /// (no adaptive scan policy on iOS — background scans are
+        /// OS-coalesced).
         var scanMode: String? = nil
+        /// Host app identifier (0.2.0 item i): Bundle.main.bundleIdentifier,
+        /// so the fleet dashboard can group installs by the app they live
+        /// in and ops can spot a token minted for one app running inside
+        /// another. Additive optional field; the server ignores it until it
+        /// grows a column.
+        var hostApp: String? = nil
     }
 
     static func build(_ runtime: Runtime, _ deltas: Counters.Snapshot) -> String {
@@ -56,6 +64,9 @@ enum HeartbeatPayload {
         if let mode = runtime.scanMode {
             fields.append(("scan_mode", mode))
         }
+        if let host = runtime.hostApp {
+            fields.append(("host_app", host))
+        }
         // No field above can hold a non-finite Double (the one Json.obj
         // throw), so the fallback is unreachable; it exists because the
         // heartbeat path must never throw into the loop.
@@ -77,7 +88,12 @@ extension DeviceRollup {
     /// app extraction (`heartbeatValue` returns a dictionary) to the
     /// ordered-writer world; key order inside the block is unspecified,
     /// which the server doesn't care about.
-    func heartbeatRaw(now: Date = Date()) -> Json.Raw? {
+    mutating func heartbeatRaw(now: Date = Date()) -> Json.Raw? {
+        // 0.2.0 item vii: a quiet radio never calls heard(), and
+        // heartbeatValue (verbatim app extraction) only reads — so prune
+        // here, or devices_seen reports rows older than the 24 h window it
+        // claims. The app fixed the same class in its 0001 field patch.
+        prune(now: now)
         guard let data = try? JSONSerialization.data(withJSONObject: heartbeatValue(now: now)),
               let text = String(data: data, encoding: .utf8)
         else { return nil }

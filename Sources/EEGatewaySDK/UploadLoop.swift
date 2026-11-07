@@ -55,11 +55,42 @@ final class UploadLoop {
         task = nil
     }
 
-    /// One drain pass. No-op (and no callback) on an empty queue.
+    // 429 cooldown (0.2.0 item vi, from the app's 2026-09-14 storm): a
+    // rate-limited server must not be hit every 10 s for the rest of the
+    // window. First 429 in a burst arms `cooldownBaseMillis`, each
+    // subsequent 429 doubles up to `cooldownCapMillis`; ticks inside the
+    // cooldown skip the drain entirely. The first accepted batch resets the
+    // ladder. Other transients (network, 5xx) keep the plain cadence —
+    // they are not the server asking us to back off. Single-writer: only
+    // the loop task (or the test caller) touches these, inside tick().
+    static let rateLimitedReason = "HTTP 429"
+    static let cooldownBaseMillis: Int64 = 60_000
+    static let cooldownCapMillis: Int64 = 15 * 60_000
+    private var cooldownUntilMillis: Int64 = 0
+    private var cooldownStepMillis: Int64 = 0
+
+    /// Scheduler entry point.
     func tick() async {
+        await tick(nowMillis: Int64(Date().timeIntervalSince1970 * 1000))
+    }
+
+    /// One drain pass. No-op (and no callback) on an empty queue or while a
+    /// 429 cooldown is in force. Test seam: inject the clock.
+    func tick(nowMillis: Int64) async {
+        if nowMillis < cooldownUntilMillis { return }
         let batch = queue.takeBatch(PacketQueue.maxBatch)
         if batch.isEmpty { return }
         let outcome = await BatchSender.send(batch, ingest: ingest)
+        if outcome.forwarded > 0 {
+            // The server is accepting again: disarm the ladder.
+            cooldownStepMillis = 0
+            cooldownUntilMillis = 0
+        } else if outcome.transientReason == Self.rateLimitedReason {
+            cooldownStepMillis = cooldownStepMillis == 0
+                ? Self.cooldownBaseMillis
+                : min(cooldownStepMillis * 2, Self.cooldownCapMillis)
+            cooldownUntilMillis = nowMillis + cooldownStepMillis
+        }
         // Undecided packets (transient/401) go back to the FRONT so a
         // recovered network uploads oldest-first; capacity re-trim drops the
         // stalest if the queue filled meanwhile.

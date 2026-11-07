@@ -66,9 +66,14 @@ production path (per-device orgs skew fleet economics).
   matter how dense the beacon traffic gets.
 - **Battery is a contract, not a hope.** Heartbeats every 3 minutes.
   Background scanning is filtered to the EE service UUID and coalesced by
-  iOS itself. Packets queue locally (bounded) and upload in batches on a
-  10 second cadence; an offline phone holds up to 1,000 packets and drains
-  oldest-first when the network returns.
+  iOS itself. The scanner parks in Low Power Mode and whenever the fix
+  stream dies for 5 minutes (packets it can't stamp are wasted radio),
+  resuming on its own; heartbeats report `scan_mode: "paused"` so your
+  fleet view stays honest. Packets queue locally (bounded) and upload in
+  batches on a 10 second cadence; an offline phone holds up to 1,000
+  packets and drains oldest-first when the network returns, and a
+  rate-limited server backs the uploader off 60 s doubling to 15 min
+  instead of being hammered.
 - **There's a fleet kill switch.** One `gateways_paused` flag on your org
   (we flip it on request; self-serve toggle coming) parks every SDK phone
   within one heartbeat: scanning and upload stop, heartbeats keep flowing

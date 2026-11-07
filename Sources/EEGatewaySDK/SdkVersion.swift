@@ -3,5 +3,5 @@
 /// from here, so the published artifact, the API constant, and fleet
 /// telemetry can never disagree. Bump this, and only this, on release.
 enum SdkVersion {
-    static let string = "0.1.0"
+    static let string = "0.2.0"
 }

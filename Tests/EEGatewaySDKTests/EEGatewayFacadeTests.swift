@@ -220,6 +220,6 @@ final class EEGatewayFacadeTests: XCTestCase {
     }
 
     func testStatusCarriesVersionConstant() {
-        XCTAssertEqual(EEGateway.version, "0.1.0")
+        XCTAssertEqual(EEGateway.version, "0.2.0")
     }
 }

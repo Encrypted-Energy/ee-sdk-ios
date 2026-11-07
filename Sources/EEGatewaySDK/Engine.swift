@@ -30,6 +30,10 @@ import Foundation
 final class Engine {
 
     static let defaultPollInterval: TimeInterval = 5
+    /// RadioGate evaluation cadence while the pipeline is up (0.2.0): the
+    /// gate re-reads Low Power Mode and the fix stream each tick, so a
+    /// park/resume lands within one interval of the condition changing.
+    static let defaultGateInterval: TimeInterval = 30
     /// SDK-namespaced (C4 rule): never collides with a host or the
     /// first-party app sharing the container.
     static let queueFileName = "com.encryptedenergy.sdk.packet-queue.eeq"
@@ -40,6 +44,10 @@ final class Engine {
     private let radio: PacketRadio
     private let location: LocationSource
     private let permissionsCheck: () -> Bool
+    private let lowPower: () -> Bool
+    private let hostApp: String?
+    private let gateInterval: TimeInterval
+    private let radioGate = RadioGate()
     private let onChanged: () -> Void
     private let osVersion: String
     private let defaultDeviceName: () -> String
@@ -69,6 +77,9 @@ final class Engine {
     private var _started = false
     private var _scanning = false
     private var _remotePaused = false
+    /// Radio parked by RadioGate (Low Power Mode / dead fix stream) while
+    /// the pipeline stays up. Written on workQueue, read by heartbeat.
+    private var _radioParked = false
     private var rollup = DeviceRollup()
 
     private let startedAt = Date()
@@ -87,11 +98,17 @@ final class Engine {
         queue: PacketQueue = PacketQueue(),
         workQueue: DispatchQueue = DispatchQueue(label: "ee-sdk-engine"),
         pollInterval: TimeInterval = Engine.defaultPollInterval,
+        lowPower: @escaping () -> Bool = { false },
+        hostApp: String? = nil,
+        gateInterval: TimeInterval = Engine.defaultGateInterval,
         onChanged: @escaping () -> Void
     ) {
         self.config = config
         self.tokenStore = tokenStore
         self.client = client
+        self.lowPower = lowPower
+        self.hostApp = hostApp
+        self.gateInterval = gateInterval
         self.defaultDeviceName = defaultDeviceName
         self.mint = mint ?? { deviceName in
             await EEClient.mintDevice(deviceName: deviceName, baseUrl: config.baseUrl)
@@ -165,6 +182,9 @@ final class Engine {
     var scanning: Bool { stateLock.lock(); defer { stateLock.unlock() }; return _scanning }
     /// Server kill switch is ON: pipeline+upload parked, heartbeats flowing.
     var remotePaused: Bool { stateLock.lock(); defer { stateLock.unlock() }; return _remotePaused }
+    /// RadioGate parked the scanner (Low Power Mode / dead fix stream)
+    /// while the pipeline stays up.
+    var radioParked: Bool { stateLock.lock(); defer { stateLock.unlock() }; return _radioParked }
 
     func queueDepth() -> Int { queue.size() }
     func permissionsGranted() -> Bool { permissionsCheck() }
@@ -309,25 +329,68 @@ final class Engine {
 
     private func startPipeline() {
         guard !scanning, !remotePaused else { return }
+        let nowMillis = Int64(Date().timeIntervalSince1970 * 1000)
+        radioGate.reset(nowMillis: nowMillis)
+        radioGate.onLowPower(lowPower())
         location.start()
         setScanning(true)
-        radio.start()
+        // A phone that starts in Low Power Mode parks the radio from the
+        // first moment; the gate tick resumes it when LPM lifts.
+        let parked = radioGate.verdict(nowMillis: nowMillis) != .scan
+        setRadioParked(parked)
+        if !parked { radio.start() }
         // A grant revoked between the permission check and the radio call
         // surfaces as a SYNCHRONOUS .unauthorized inside radio.start(): the
         // onState handler tears the pipeline back down (scanning must
         // already be true for it to act — hence the order above).
+        if scanning { scheduleGateTick() }
     }
 
     private func stopPipeline() {
         guard scanning else { return }
-        radio.stop()
+        if !radioParked { radio.stop() }
         location.stop()
         setScanning(false)
+        setRadioParked(false)
+    }
+
+    /// RadioGate cadence (workQueue): re-reads Low Power Mode and the fix
+    /// stream, parks or resumes the scanner, reschedules itself while the
+    /// pipeline is up. No cancel handle — a late fire re-checks `scanning`
+    /// and dies quietly, same pattern as the permission poll.
+    private func scheduleGateTick() {
+        workQueue.asyncAfter(deadline: .now() + gateInterval) { [weak self] in
+            guard let self, self.scanning else { return }
+            self.evaluateRadio()
+            self.scheduleGateTick()
+        }
+    }
+
+    /// workQueue only. Location keeps running while parked: it is both the
+    /// stamp source and the no-fix recovery signal.
+    private func evaluateRadio() {
+        guard scanning else { return }
+        let nowMillis = Int64(Date().timeIntervalSince1970 * 1000)
+        radioGate.onLowPower(lowPower())
+        if location.freshFix(nowMillis: nowMillis) != nil {
+            radioGate.onFix(nowMillis: nowMillis)
+        }
+        let park = radioGate.verdict(nowMillis: nowMillis) != .scan
+        guard park != radioParked else { return }
+        setRadioParked(park)
+        if park { radio.stop() } else { radio.start() }
+        onChanged()
     }
 
     private func setScanning(_ value: Bool) {
         stateLock.lock()
         _scanning = value
+        stateLock.unlock()
+    }
+
+    private func setRadioParked(_ value: Bool) {
+        stateLock.lock()
+        _radioParked = value
         stateLock.unlock()
     }
 
@@ -391,7 +454,8 @@ final class Engine {
         let nowMillis = Int64(Date().timeIntervalSince1970 * 1000)
         stateLock.lock()
         let lastPacket = _lastPacketAtMillis
-        let active = _scanning
+        let active = _scanning && !_radioParked
+        let parked = _radioParked
         let devices = rollup.heartbeatRaw()
         stateLock.unlock()
         // gps_status (§1b): permission denied maps to dongle_missing —
@@ -415,9 +479,11 @@ final class Engine {
             // tooling expects from a phone that isn't scanning.
             clientState: active ? "active" : "backgrounded",
             devicesSeen: devices,
-            // scan_mode omitted: no adaptive scan policy in the iOS SDK v1
-            // (see NOTES.md — background scans are OS-coalesced).
-            scanMode: nil
+            // "paused" while RadioGate parks the radio; otherwise omitted
+            // (no adaptive scan policy on iOS — background scans are
+            // OS-coalesced, see NOTES.md).
+            scanMode: parked ? "paused" : nil,
+            hostApp: hostApp
         )
     }
 
