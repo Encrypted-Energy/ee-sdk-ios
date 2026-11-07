@@ -1,8 +1,8 @@
-# Releasing (SPM, private repo)
+# Releasing (SPM)
 
 A release of this SDK is a git tag — SPM resolves versions from tags, so
-there's no artifact to upload. Partners add the package by URL (with a PAT
-or deploy key while the repo is private) and pin a version rule.
+there's no artifact to upload. The repo is public (flipped 2026-11-07);
+partners add the package by URL and pin a version rule.
 
 ## Checklist
 
@@ -25,13 +25,12 @@ or deploy key while the repo is private) and pin a version rule.
 6. Verify fleet telemetry: within one heartbeat of a dogfood device
    updating, `gateways.worker_version` should read `ee-sdk-ios/<new>`.
 
-## Partner consumption (private phase)
+## Partner consumption
 
 Xcode → Add Package Dependencies →
-`https://github.com/Encrypted-Energy/ee-sdk-ios.git` with a GitHub account
-that has read access (or SSH). Dependency rule: Up to Next Minor from the
-tagged version. Goes public when C0 settles the terms (the SDK is
-Apache-2.0, so proprietary hosts need no separate license).
+`https://github.com/Encrypted-Energy/ee-sdk-ios.git`. Dependency rule:
+Up to Next Minor from the tagged version. The SDK is Apache-2.0, so
+proprietary hosts need no separate license.
 
 ## CI (one-time setup)
 
