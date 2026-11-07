@@ -1,7 +1,7 @@
 import Foundation
 
 /// Heartbeat loop (plan §1b): fires immediately on start, then every
-/// `intervalSeconds`. The SDK's cadence is 5 MINUTES, not the first-party
+/// `intervalSeconds`. The SDK's cadence is 3 MINUTES, not the first-party
 /// app's 60 s — conservative battery/network cost on someone else's fleet is
 /// a hard contract (plan §6 risk 3), and the architecture diagram pins it.
 ///
@@ -17,8 +17,9 @@ import Foundation
 /// non-throwing-closure deltas as UploadLoop).
 final class HeartbeatLoop {
 
-    /// 5 min — the SDK's conservative fleet cadence (plan §3 diagram).
-    static let intervalSeconds: UInt64 = 300
+    /// 3 min — the SDK's conservative fleet cadence (300 s at launch;
+    /// tightened to 180 s per John 11/6 after first-device dogfood).
+    static let intervalSeconds: UInt64 = 180
 
     private let heartbeat: (String) async -> EEClient.Result
     private let counters: Counters

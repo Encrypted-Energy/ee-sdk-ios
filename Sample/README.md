@@ -44,5 +44,5 @@ alone, so the Xcode project is created once on a Mac (~10 minutes):
    OFF, paste the token, Start — verify-before-persist proves it against
    /gateways/verify before it ever reaches the Keychain.
 6. Kill-switch pass: flip the org's `gateways_paused` on, wait one
-   heartbeat (≤5 min) → state `pausedRemote`, scanning stops; flip it off →
+   heartbeat (≤3 min) → state `pausedRemote`, scanning stops; flip it off →
    `running` resumes on its own.

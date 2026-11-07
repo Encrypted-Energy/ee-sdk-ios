@@ -58,7 +58,7 @@ production path (per-device orgs skew fleet economics).
 - **Status is observable, not polled.** `EEGateway.setListener { status in
   ... }` delivers on the main queue, coalesced to about once per second no
   matter how dense the beacon traffic gets.
-- **Battery is a contract, not a hope.** Heartbeats every 5 minutes.
+- **Battery is a contract, not a hope.** Heartbeats every 3 minutes.
   Background scanning is filtered to the EE service UUID and coalesced by
   iOS itself. Packets queue locally (bounded) and upload in batches on a
   10 second cadence; an offline phone holds up to 1,000 packets and drains

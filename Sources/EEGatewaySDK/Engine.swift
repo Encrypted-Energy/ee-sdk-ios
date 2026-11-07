@@ -219,7 +219,7 @@ final class Engine {
             let result = await runner.run(isActive: { self.started && !Task.isCancelled })
             if result == .provisioned {
                 // Immediate hello: telemetry, `disable`, and the public id
-                // land now, not one 5-min cadence later.
+                // land now, not one 3-min cadence later.
                 await self.heartbeatLoop.tick()
             }
             self.onChanged()

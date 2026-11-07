@@ -70,9 +70,10 @@ final class HeartbeatLoopTests: XCTestCase {
         }
     }
 
-    func testSdkCadenceIsFiveMinutes() {
-        // Plan §3 diagram + §6 risk 3: conservative fleet cadence, NOT the
+    func testSdkCadenceIsThreeMinutes() {
+        // Plan §3 + §6 risk 3: conservative fleet cadence, NOT the
         // first-party app's 60 s. A partner's battery budget is a contract.
-        XCTAssertEqual(HeartbeatLoop.intervalSeconds, 300)
+        // 300 s at launch; 180 s per John 11/6 after first-device dogfood.
+        XCTAssertEqual(HeartbeatLoop.intervalSeconds, 180)
     }
 }
