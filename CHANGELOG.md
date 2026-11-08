@@ -32,7 +32,7 @@ Guest-courtesy and resilience release; frozen public API unchanged
 
 ## 0.1.0 — 2026-11-07
 
-First extraction arc (S1–S6 + S7 sample), built 2026-11-06 from the shipped
+First extraction arc, built 2026-11-06 from the shipped
 gateway-ios 1.5 sources and the ee-sdk-android contracts:
 
 - Frozen public API: `EEGateway` / `EEConfig` / `EEStatus` / `EEState` /

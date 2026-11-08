@@ -9,7 +9,7 @@ partners add the package by URL and pin a version rule.
 1. All of `./runtests.sh` green (Linux) AND `swift test` green on a Mac
    (the Mac run adds the Darwin-only Keychain tests and compiles the
    CoreBluetooth/CoreLocation adapters, which Linux can't).
-2. S7 sample built and dogfooded against prod on a real device for any
+2. Sample app built and dogfooded against prod on a real device for any
    release that touched the pipeline (Engine, loops, adapters).
 3. Public surface unchanged, or additively extended with `api-freeze.md`
    updated in the same commit.
