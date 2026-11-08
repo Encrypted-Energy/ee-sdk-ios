@@ -9,6 +9,7 @@ and nothing changes for your users beyond one opt-in screen you
 control.
 
 ```swift
+// at app launch
 EEGateway.configure(.gatewayToken(token: tokenFromYourBackend))
 EEGateway.start()
 ```
@@ -49,9 +50,17 @@ That's the whole integration.
    `ee_live_…` token over your own authenticated channel. Tokens are
    verified against the server before they're persisted to the
    Keychain.
-5. **Watch it earn** on your [dashboard](https://encryptedenergy.com/settings/org/gateways):
-   packets, devices heard, and sats per install, with your fleet
-   rolled up into one card.
+5. **Confirm it's alive.** Within 3 minutes your
+   [dashboard](https://encryptedenergy.com/settings/org/gateways)
+   shows the install's first heartbeat ("Seen seconds ago" plus a GPS
+   status). That heartbeat means the integration works.
+
+A word on what you'll see next: the gateway stays **"Pending first
+packet"** until it hears a real beacon, and at a desk that can take a
+while: beacon fleets cluster around warehouses, delivery routes, and
+logistics corridors, not office parks. Heartbeats flowing = done;
+packets follow wherever your users actually go. Take the sample for a
+drive if you want to see one land.
 
 Kicking the tires first? `EEGateway.configure(.selfMint())` lets a
 device mint its own identity with no backend work: demo mode, not the
