@@ -105,29 +105,32 @@ production path.
 flow, both identity modes, Start/Stop, and live status.
 [`Sample/README.md`](Sample/README.md) is a 10-minute Xcode runbook.
 
-## The contract
+## What this SDK will never do to your app
 
-These are promises, not just behavior (frozen in
-[api-freeze.md](api-freeze.md): the public API only grows, it never
-changes meaning):
+You're letting our code live inside the app you built. These six
+promises are frozen in [api-freeze.md](api-freeze.md): the public API
+only grows, it never changes meaning.
 
-- **It never throws.** No force-unwraps, no fatalError, no crash
-  vectors; problems surface in status, never in your crash reporter.
-- **It never prompts.** The central manager is never even created
-  while Bluetooth permission is undetermined. Your app owns the
-  permission UX.
-- **Your lifecycle drives it.** No services, no background modes of
-  its own; it rides the ones your app already declares.
-- **Battery is a contract.** Background scanning is service-filtered
-  and coalesced by iOS itself; the scanner parks in Low Power Mode and
-  when the fix stream dies (packets it can't stamp are wasted radio),
-  and resumes on its own. A rate-limited server backs the uploader off
-  instead of being hammered.
-- **There's a fleet kill switch.** One flag parks every install within
-  one heartbeat, no app update needed; heartbeats keep flowing so
-  un-pausing is just as fast.
-- **Packets queue through process death** (bounded at 1,000) and
-  upload oldest-first when the network returns.
+- **It can't crash your app.** No force-unwraps, no fatalError, no
+  crash vectors. Problems surface in `status()`, never in your crash
+  reporter.
+- **Your users never see a prompt from us.** The central manager isn't
+  even created while Bluetooth permission is undetermined. You own the
+  permission UX; the SDK waits behind it.
+- **It runs only where your app already runs.** No services, no
+  background modes of its own. It rides the ones you declare and stops
+  when your app stops.
+- **It protects the battery before it earns.** iOS service-filters and
+  coalesces the background scan, and the scanner parks itself in Low
+  Power Mode or when GPS has no fix (packets it can't stamp are wasted
+  radio), then resumes on its own. A rate-limited server backs the
+  uploader off instead of being hammered.
+- **You can pause every install with one switch.** One flag on your
+  org parks the whole fleet within a heartbeat, no app update needed.
+  Flip it back and they resume just as fast.
+- **It doesn't lose packets when iOS kills the process.** The queue
+  (bounded at 1,000) persists and uploads oldest-first when the
+  network returns.
 
 ## Watching it run
 
