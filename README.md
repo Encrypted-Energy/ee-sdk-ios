@@ -4,9 +4,7 @@ Your app already holds Bluetooth and location permissions. This SDK
 borrows the idle radio: it hears encrypted beacon packets from
 logistics sensor networks, stamps where they were heard, and relays
 them up. Every device your installs hear first in a day earns your
-org a bounty, paid in Bitcoin over Lightning. No ads, no data sale,
-and nothing changes for your users beyond one opt-in screen you
-control.
+org a bounty, paid in Bitcoin over Lightning. No ads, no data sale.
 
 ```swift
 // at app launch
@@ -15,6 +13,41 @@ EEGateway.start()
 ```
 
 That's the whole integration.
+
+## What actually changes
+
+For your users:
+
+- **No new permission prompts.** The SDK uses the grants your app
+  already holds and never asks for anything itself.
+- **One opt-in screen, shown by your app, before the first scan.**
+  Your users granted Bluetooth and location for your features.
+  Relaying beacon data to a third party is a new use of those grants,
+  and Apple's Guideline 5.1.2 requires disclosure and explicit
+  permission before an app does that. The opt-in screen is that
+  permission, and it's what keeps your app on the right side of App
+  Review. We ship the exact copy in
+  [docs/COMPLIANCE.md](docs/COMPLIANCE.md). Users who decline keep
+  using your app exactly as before; you never call `start()` for them.
+- **A small, managed battery cost.** Background scanning is
+  service-filtered and coalesced by iOS itself; the scanner parks in
+  Low Power Mode and when GPS has no fix, and resumes on its own.
+- **Nothing readable leaves the phone.** Packet payloads are encrypted
+  by the sensor owner's key; neither you nor we can read them. The
+  location stamps price bounties and draw the coverage map, and
+  they're never sold.
+
+For you:
+
+1. Add the package and the two lines above.
+2. Show the disclosure screen (our copy, restyled however you like)
+   and call `start()` only for users who said yes.
+3. Copy the App Privacy label answers from
+   [docs/COMPLIANCE.md](docs/COMPLIANCE.md) into App Store Connect.
+4. Provision one token per install from your backend
+   ([Quickstart](#quickstart) below).
+5. Get paid: 1 sat per unique device heard first per UTC day, pooled
+   across your org, settled daily over Lightning.
 
 ## Requirements
 
@@ -46,10 +79,10 @@ That's the whole integration.
 3. **Install the package.** Xcode → File → Add Package Dependencies →
    `https://github.com/Encrypted-Energy/ee-sdk-ios.git`, rule Up to
    Next Minor. One product: `EEGatewaySDK`.
-4. **Add the two lines** above at app launch, handing each device its
-   `ee_live_…` token over your own authenticated channel. Tokens are
-   verified against the server before they're persisted to the
-   Keychain.
+4. **Add the two lines** above at app launch, behind your opt-in
+   screen, handing each device its `ee_live_…` token over your own
+   authenticated channel. Tokens are verified against the server
+   before they're persisted to the Keychain.
 5. **Confirm it's alive.** Within 3 minutes your
    [dashboard](https://encryptedenergy.com/settings/org/gateways)
    shows the install's first heartbeat ("Seen seconds ago" plus a GPS
@@ -110,7 +143,8 @@ ops see the same truth.
 ## Store compliance
 
 Apple's Guideline 5.1.2 requires disclosure and explicit permission
-for third-party data sharing.
+before granted permissions are used for a new purpose, and relaying
+beacon data is a new purpose.
 [docs/COMPLIANCE.md](docs/COMPLIANCE.md) has the drop-in disclosure
 copy and the App Privacy label answers. Treat it as part of the
 integration, not paperwork.
