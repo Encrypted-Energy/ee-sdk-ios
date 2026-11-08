@@ -1,15 +1,15 @@
 # API freeze
 
 This is the frozen public surface of the EE gateway SDK for iOS, as of S1
-(0.1.0). It mirrors `ee-sdk-android/api-freeze.md` case for case; the two
-SDKs present one config model to a partner shipping both platforms.
+(0.1.0). It mirrors `ee-sdk-android/api-freeze.md` case for case: ship
+both platforms and you write against one config model.
 
-**Frozen-additive from S1 forward.** Once a partner ships against this
-surface we can't force their app to update, so nothing here ever changes
-meaning, signature, or removal. We only add: new types, new optional
-parameters with defaults, new enum cases appended at the end (every public
-enum here must be switched with a `default`/`@unknown default` by consumers
-per Swift convention, so appends stay source-safe).
+**Frozen-additive from S1 forward.** Once you ship against this surface
+we can't force your app to update, so nothing here ever changes meaning,
+signature, or removal. We only add: new types, new optional parameters
+with defaults, new enum cases appended at the end. Switch every public
+enum here with a `default`/`@unknown default`, per Swift convention, and
+appends stay source-safe for you.
 
 Anything not listed below is internal and may change at any time.
 
