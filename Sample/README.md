@@ -39,8 +39,8 @@ alone, so the Xcode project is created once on a Mac (~10 minutes):
    gateway reporting `worker_version: ee-sdk-ios/0.1.0`.
 4. Walk past a Hubble beacon (or sit near the desk sensor): pings heard
    climbs, queue drains on the 10 s tick, forwarded climbs.
-5. Production-mode pass: provision a token via the Org API (same curl as
-   the Android C8 runbook in `ee-sdk-android/NOTES.md`), toggle self-mint
+5. Production-mode pass: provision a token via the Org API (the curl in
+   `docs/INTEGRATION.md`), toggle self-mint
    OFF, paste the token, Start — verify-before-persist proves it against
    /gateways/verify before it ever reaches the Keychain.
 6. Kill-switch pass: flip the org's `gateways_paused` on, wait one
