@@ -69,7 +69,7 @@ production path (per-device orgs skew fleet economics).
   iOS itself. The scanner parks in Low Power Mode and whenever the fix
   stream dies for 5 minutes (packets it can't stamp are wasted radio),
   resuming on its own; heartbeats report `scan_mode: "paused"` so your
-  fleet view stays honest. Packets queue locally (bounded) and upload in
+  fleet view stays accurate. Packets queue locally (bounded) and upload in
   batches on a 10 second cadence; an offline phone holds up to 1,000
   packets and drains oldest-first when the network returns, and a
   rate-limited server backs the uploader off 60 s doubling to 15 min
